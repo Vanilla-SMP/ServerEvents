@@ -1,6 +1,8 @@
 # Random Events
 
-Welcome! 🎉  
+> **Want to see it live?** Join our Minecraft server and Discord community — **[discord.gg/UbbNPUJkCV](https://discord.gg/UbbNPUJkCV)**
+
+Welcome! 🎉
 `ServerEvents` is a special plugin that brings **live server-wide events**.  
 At random times during the day, a global event starts and everyone can use it to farm faster, gather better loot, and enjoy spontaneous action.
 
@@ -61,7 +63,24 @@ If an event is already running, players with boss bar enabled are attached immed
 - Command `/compass` is listed in an old config draft but is **not active in the current plugin logic**.
 
 ## ❓ Need help?
-- Event names and durations are normal for players to notice in-game.  
+- Event names and durations are normal for players to notice in-game.
 - If you never see an event for a while, remember the timing is randomized across the day.
 
-# ServerEvents
+---
+
+## Try it live 🎮
+
+This plugin runs on our public Minecraft server. Come test it yourself, report bugs, or just have fun!
+
+**[Join our Discord → discord.gg/UbbNPUJkCV](https://discord.gg/UbbNPUJkCV)**
+
+---
+
+## For developers 🛠️
+
+Interested in how this works, want to contribute, or have ideas for improvements?
+
+The source is in this repo. Feel free to open issues or PRs.
+For questions, architecture discussions, or feedback — find us on Discord:
+
+**[discord.gg/UbbNPUJkCV](https://discord.gg/UbbNPUJkCV)**
