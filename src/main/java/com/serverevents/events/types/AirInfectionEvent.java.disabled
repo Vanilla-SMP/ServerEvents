@@ -1,0 +1,104 @@
+package com.serverevents.events.types;
+
+import com.serverevents.ServerEvents;
+import com.serverevents.events.ServerEvent;
+import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.format.NamedTextColor;
+import net.kyori.adventure.text.format.TextDecoration;
+import org.bukkit.*;
+import org.bukkit.attribute.Attribute;
+import org.bukkit.boss.BarColor;
+import org.bukkit.boss.BarStyle;
+import org.bukkit.enchantments.Enchantment;
+import org.bukkit.entity.Monster;
+import org.bukkit.entity.Player;
+import org.bukkit.event.EventHandler;
+import org.bukkit.event.HandlerList;
+import org.bukkit.event.Listener;
+import org.bukkit.event.entity.CreatureSpawnEvent;
+import org.bukkit.event.entity.EntityDeathEvent;
+import org.bukkit.inventory.ItemStack;
+import org.bukkit.inventory.meta.ItemMeta;
+
+import java.util.Random;
+
+public class AirInfectionEvent extends ServerEvent implements Listener {
+    private final ServerEvents plugin;
+    private final Random random = new Random();
+
+    public AirInfectionEvent(ServerEvents plugin) {
+        super("Заражение воздуха");
+        this.plugin = plugin;
+    }
+
+    @Override
+    public void start() {
+        bossBar = Bukkit.createBossBar("§4Заражение воздуха §f| Мобы усилены! HP x10, Урон x2", BarColor.RED, BarStyle.SEGMENTED_10);
+        bossBar.setProgress(1.0);
+        Bukkit.getPluginManager().registerEvents(this, plugin);
+    }
+
+    @Override
+    public void stop() {
+        if (bossBar != null) bossBar.removeAll();
+        HandlerList.unregisterAll(this);
+    }
+
+    @Override
+    public void tick() {}
+
+    @Override
+    public void onPlayerJoin(Player player) {
+        if (bossBar != null && preferences != null && preferences.isEnabled(player.getUniqueId())) {
+            bossBar.removePlayer(player);
+            bossBar.addPlayer(player);
+            player.playSound(player.getLocation(), Sound.ENTITY_ENDER_DRAGON_GROWL, 0.5f, 0.5f);
+        }
+    }
+
+    @EventHandler
+    public void onMobSpawn(CreatureSpawnEvent event) {
+        if (event.getEntity() instanceof Monster monster) {
+            double maxHealth = monster.getAttribute(Attribute.MAX_HEALTH).getBaseValue() * 10;
+            monster.getAttribute(Attribute.MAX_HEALTH).setBaseValue(maxHealth);
+            monster.setHealth(maxHealth);
+            double damage = monster.getAttribute(Attribute.ATTACK_DAMAGE).getBaseValue() * 2;
+            monster.getAttribute(Attribute.ATTACK_DAMAGE).setBaseValue(damage);
+        }
+    }
+
+    @EventHandler
+    public void onMobDeath(EntityDeathEvent event) {
+        if (event.getEntity() instanceof Monster) {
+            event.getDrops().clear();
+            double roll = random.nextDouble();
+            if (roll < 0.10) {
+                event.getDrops().add(createRedPot());
+            } else if (roll < 0.40) {
+                event.getDrops().add(createPurplePot());
+            }
+        }
+    }
+
+    private ItemStack createRedPot() {
+        ItemStack pot = new ItemStack(Material.DECORATED_POT);
+        ItemMeta meta = pot.getItemMeta();
+        meta.displayName(Component.text("★ Горшσчéк лÿта ★").color(NamedTextColor.GOLD).decoration(TextDecoration.ITALIC, false));
+        meta.lore(java.util.List.of(Component.text("Красный").color(NamedTextColor.RED)));
+        meta.setEnchantmentGlintOverride(true);
+        pot.setItemMeta(meta);
+        pot.addUnsafeEnchantment(Enchantment.FORTUNE, 3);
+        return pot;
+    }
+
+    private ItemStack createPurplePot() {
+        ItemStack pot = new ItemStack(Material.DECORATED_POT);
+        ItemMeta meta = pot.getItemMeta();
+        meta.displayName(Component.text("★ Горшσчéк лÿта ★").color(NamedTextColor.GOLD).decoration(TextDecoration.ITALIC, false));
+        meta.lore(java.util.List.of(Component.text("Фиолетовый")));
+        meta.setEnchantmentGlintOverride(true);
+        pot.setItemMeta(meta);
+        pot.addUnsafeEnchantment(Enchantment.FORTUNE, 3);
+        return pot;
+    }
+}

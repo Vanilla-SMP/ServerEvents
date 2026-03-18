@@ -1,0 +1,133 @@
+package com.serverevents.events.types;
+
+import com.serverevents.ServerEvents;
+import com.serverevents.events.ServerEvent;
+import org.bukkit.*;
+import org.bukkit.boss.BarColor;
+import org.bukkit.boss.BarStyle;
+import org.bukkit.entity.Drowned;
+import org.bukkit.entity.EntityType;
+import org.bukkit.entity.Player;
+import org.bukkit.event.EventHandler;
+import org.bukkit.event.HandlerList;
+import org.bukkit.event.Listener;
+import org.bukkit.event.block.BlockBreakEvent;
+import org.bukkit.inventory.ItemStack;
+import org.bukkit.inventory.meta.CompassMeta;
+import org.bukkit.command.Command;
+import org.bukkit.command.CommandExecutor;
+import org.bukkit.command.CommandSender;
+import org.bukkit.enchantments.Enchantment;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Random;
+
+public class GoldenSpongeEvent extends ServerEvent implements Listener, CommandExecutor {
+    private final ServerEvents plugin;
+    private Location spongeLocation;
+    private final List<Drowned> drowned = new ArrayList<>();
+    private static final String COMPASS_NAME = "§bВодный компас";
+
+    public GoldenSpongeEvent(ServerEvents plugin) {
+        super("Золотая губка");
+        this.plugin = plugin;
+    }
+
+    @Override
+    public void start() {
+        bossBar = Bukkit.createBossBar("§bЗолотая губка §f| Найти локацию /compass", BarColor.BLUE, BarStyle.SOLID);
+        bossBar.setProgress(1.0);
+        Bukkit.getPluginManager().registerEvents(this, plugin);
+        plugin.getCommand("compass").setExecutor(this);
+        spawnSponge();
+    }
+
+    private void spawnSponge() {
+        World world = Bukkit.getWorlds().get(0);
+        Random random = new Random();
+        for (int attempts = 0; attempts < 200; attempts++) {
+            int x = random.nextInt(4000) - 2000;
+            int z = random.nextInt(4000) - 2000;
+            for (int y = 50; y > 20; y--) {
+                Location loc = new Location(world, x, y, z);
+                if (loc.getBlock().getType() == Material.WATER && isOceanBiome(loc.getBlock().getBiome())) {
+                    spongeLocation = loc;
+                    loc.getBlock().setType(Material.SPONGE);
+                    for (int i = 0; i < 15; i++) {
+                        Location dLoc = loc.clone().add(random.nextInt(10) - 5, random.nextInt(5) - 2, random.nextInt(10) - 5);
+                        if (dLoc.getBlock().getType() == Material.WATER) {
+                            Drowned d = (Drowned) world.spawnEntity(dLoc, EntityType.DROWNED);
+                            d.setCustomName("§bМорской страж");
+                            d.setCustomNameVisible(true);
+                            drowned.add(d);
+                        }
+                    }
+                    return;
+                }
+            }
+        }
+    }
+
+    private boolean isOceanBiome(org.bukkit.block.Biome biome) {
+        String biomeName = biome.toString();
+        return biomeName.contains("OCEAN") || biomeName.contains("DEEP");
+    }
+
+    @Override
+    public void stop() {
+        if (bossBar != null) bossBar.removeAll();
+        drowned.forEach(d -> { if (d != null && d.isValid()) d.remove(); });
+        drowned.clear();
+        if (spongeLocation != null && spongeLocation.getBlock().getType() == Material.SPONGE) {
+            spongeLocation.getBlock().setType(Material.WATER);
+        }
+        for (Player p : Bukkit.getOnlinePlayers()) {
+            p.getInventory().forEach(item -> {
+                if (item != null && item.hasItemMeta() && COMPASS_NAME.equals(item.getItemMeta().getDisplayName())) {
+                    p.getInventory().remove(item);
+                }
+            });
+        }
+        HandlerList.unregisterAll(this);
+    }
+
+    @Override
+    public void tick() {}
+
+    @Override
+    public void onPlayerJoin(Player player) {
+        if (bossBar != null && preferences != null && preferences.isEnabled(player.getUniqueId())) {
+            bossBar.removePlayer(player);
+            bossBar.addPlayer(player);
+            player.playSound(player.getLocation(), Sound.ENTITY_DROWNED_AMBIENT, 1.0f, 0.8f);
+        }
+    }
+
+    @EventHandler
+    public void onBlockBreak(BlockBreakEvent event) {
+        if (spongeLocation != null && event.getBlock().getLocation().equals(spongeLocation) && event.getBlock().getType() == Material.SPONGE) {
+            event.setDropItems(false);
+            for (int i = 0; i < 10; i++) {
+                event.getBlock().getWorld().dropItemNaturally(event.getBlock().getLocation(), new ItemStack(Material.GOLD_INGOT, 64));
+            }
+            event.getPlayer().sendMessage("§6§lВы нашли золотую губку и получили 10 стаков золота!");
+        }
+    }
+
+    @Override
+    public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
+        if (!(sender instanceof Player player)) return true;
+        if (spongeLocation == null) return true;
+        ItemStack compass = new ItemStack(Material.COMPASS);
+        CompassMeta meta = (CompassMeta) compass.getItemMeta();
+        meta.setDisplayName(COMPASS_NAME);
+        meta.setLodestone(spongeLocation);
+        meta.setLodestoneTracked(false);
+        meta.addEnchant(Enchantment.FORTUNE, 1, true);
+        compass.setItemMeta(meta);
+        player.getInventory().addItem(compass);
+        player.sendMessage("§bВы получили водный компас!");
+        return true;
+    }
+}

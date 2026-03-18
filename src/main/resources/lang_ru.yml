@@ -1,0 +1,16 @@
+messages:
+  logs:
+    discord_enabled: "Discord notifications enabled."
+    plugin_enabled: "ServerEvents enabled!"
+    plugin_disabled: "ServerEvents disabled!"
+  bossbar:
+    only_players: "Only players can use this command."
+    enabled: "Event boss bar enabled."
+    disabled: "Event boss bar disabled."
+  welcome:
+    title: "<gradient:#0094c8:#004c8d>VanillaSMP</gradient>"
+    subtitle: "<color:#ffffff>ꜱᴜʀᴠɪᴠᴀʟ</color>"
+  discord:
+    event_started_title: "🌟 Event started"
+    failed_http: "[Discord] Failed to send notification, HTTP"
+    error_sending: "[Discord] Error sending notification:"

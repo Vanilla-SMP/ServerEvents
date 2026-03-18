@@ -1,0 +1,11 @@
+localization:
+  # ru, en
+  language: "ru"
+  # Можно добавить override-сообщения прямо тут:
+  # messages:
+  #   logs:
+  #     plugin_enabled: "..."
+
+discord:
+  bot-token: "YOUR_BOT_TOKEN_HERE"
+  channel-id: "YOUR_CHANNEL_ID_HERE"

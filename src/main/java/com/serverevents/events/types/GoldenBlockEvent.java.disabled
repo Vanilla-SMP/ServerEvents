@@ -1,0 +1,216 @@
+package com.serverevents.events.types;
+
+import com.serverevents.ServerEvents;
+import com.serverevents.events.ServerEvent;
+import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.format.NamedTextColor;
+import net.kyori.adventure.text.format.TextDecoration;
+import org.bukkit.*;
+import org.bukkit.boss.BarColor;
+import org.bukkit.boss.BarStyle;
+import org.bukkit.enchantments.Enchantment;
+import org.bukkit.entity.EntityType;
+import org.bukkit.entity.Player;
+import org.bukkit.entity.Zombie;
+import org.bukkit.event.EventHandler;
+import org.bukkit.event.HandlerList;
+import org.bukkit.event.Listener;
+import org.bukkit.event.block.BlockBreakEvent;
+import org.bukkit.event.block.BlockPlaceEvent;
+import org.bukkit.inventory.ItemStack;
+import org.bukkit.inventory.meta.ItemMeta;
+import org.bukkit.inventory.meta.CompassMeta;
+import org.bukkit.scheduler.BukkitTask;
+import org.bukkit.command.Command;
+import org.bukkit.command.CommandExecutor;
+import org.bukkit.command.CommandSender;
+
+import java.util.*;
+
+public class GoldenBlockEvent extends ServerEvent implements Listener, CommandExecutor {
+    private final ServerEvents plugin;
+    private Location blockLocation;
+    private final List<Zombie> zombies = new ArrayList<>();
+    private final Map<UUID, Long> playerStandTime = new HashMap<>();
+    private BukkitTask spawnTask, rewardTask;
+    private static final String COMPASS_NAME = "§6Золотой компас";
+
+    public GoldenBlockEvent(ServerEvents plugin) {
+        super("Золотой блок");
+        this.plugin = plugin;
+    }
+
+    @Override
+    public void start() {
+        bossBar = Bukkit.createBossBar("§6Золотой блок §f| Найти локацию /compass", BarColor.YELLOW, BarStyle.SOLID);
+        bossBar.setProgress(1.0);
+        Bukkit.getPluginManager().registerEvents(this, plugin);
+        plugin.getCommand("compass").setExecutor(this);
+        spawnGoldenBlock();
+        startZombieSpawner();
+        startRewardChecker();
+    }
+
+    private void spawnGoldenBlock() {
+        World world = Bukkit.getWorlds().get(0);
+        Random random = new Random();
+        int x = random.nextInt(2000) - 1000;
+        int z = random.nextInt(2000) - 1000;
+        int y = world.getHighestBlockYAt(x, z);
+        blockLocation = new Location(world, x, y, z);
+        blockLocation.getBlock().setType(Material.GOLD_BLOCK);
+        world.strikeLightningEffect(blockLocation);
+        Bukkit.broadcast(Component.text("★ Золотой блок появился! ★", NamedTextColor.GOLD));
+    }
+
+    private void startZombieSpawner() {
+        spawnTask = Bukkit.getScheduler().runTaskTimer(plugin, () -> {
+            if (blockLocation == null) return;
+            Random random = new Random();
+            Location spawnLoc = blockLocation.clone().add(random.nextInt(20) - 10, 0, random.nextInt(20) - 10);
+            spawnLoc.setY(blockLocation.getWorld().getHighestBlockYAt(spawnLoc));
+            Zombie zombie = (Zombie) blockLocation.getWorld().spawnEntity(spawnLoc, EntityType.ZOMBIE);
+            zombie.setCustomName("§6Золотой зомби");
+            zombie.setCustomNameVisible(true);
+            zombie.setTarget(getNearestPlayer(spawnLoc));
+            zombies.add(zombie);
+            if (zombies.size() > 50) {
+                Zombie oldest = zombies.remove(0);
+                if (oldest != null && oldest.isValid()) oldest.remove();
+            }
+        }, 0, 40);
+    }
+
+    private void startRewardChecker() {
+        rewardTask = Bukkit.getScheduler().runTaskTimer(plugin, () -> {
+            if (blockLocation == null) return;
+            for (Player player : Bukkit.getOnlinePlayers()) {
+                Location playerLoc = player.getLocation();
+                if (playerLoc.getWorld().equals(blockLocation.getWorld()) &&
+                    playerLoc.getBlockX() == blockLocation.getBlockX() &&
+                    playerLoc.getBlockY() == blockLocation.getBlockY() &&
+                    playerLoc.getBlockZ() == blockLocation.getBlockZ()) {
+                    long currentTime = System.currentTimeMillis();
+                    long standTime = playerStandTime.getOrDefault(player.getUniqueId(), currentTime);
+                    if (currentTime - standTime >= 10000) {
+                        givePot(player);
+                        playerStandTime.put(player.getUniqueId(), currentTime);
+                    }
+                } else {
+                    playerStandTime.remove(player.getUniqueId());
+                }
+            }
+        }, 0, 20);
+    }
+
+    private void givePot(Player player) {
+        Random random = new Random();
+        ItemStack pot = random.nextDouble() < 0.10 ? createRedPot() : createPurplePot();
+        player.getInventory().addItem(pot);
+        player.sendMessage("§6Вы получили горшочек лута!");
+        player.playSound(player.getLocation(), Sound.ENTITY_PLAYER_LEVELUP, 1.0f, 1.5f);
+    }
+
+    @Override
+    public void stop() {
+        if (bossBar != null) bossBar.removeAll();
+        if (spawnTask != null) spawnTask.cancel();
+        if (rewardTask != null) rewardTask.cancel();
+        zombies.forEach(z -> { if (z != null && z.isValid()) z.remove(); });
+        zombies.clear();
+        playerStandTime.clear();
+        for (Player p : Bukkit.getOnlinePlayers()) {
+            p.getInventory().forEach(item -> {
+                if (item != null && item.hasItemMeta() && COMPASS_NAME.equals(item.getItemMeta().getDisplayName())) {
+                    p.getInventory().remove(item);
+                }
+            });
+        }
+        HandlerList.unregisterAll(this);
+    }
+
+    @Override
+    public void tick() {}
+
+    @Override
+    public void onPlayerJoin(Player player) {
+        if (bossBar != null && preferences != null && preferences.isEnabled(player.getUniqueId())) {
+            bossBar.removePlayer(player);
+            bossBar.addPlayer(player);
+            player.playSound(player.getLocation(), Sound.BLOCK_BELL_USE, 1.0f, 1.0f);
+        }
+    }
+
+    @EventHandler
+    public void onBlockBreak(BlockBreakEvent event) {
+        if (blockLocation != null && isNearBlock(event.getBlock().getLocation())) {
+            event.setCancelled(true);
+            event.getPlayer().sendMessage("§cНельзя ломать блоки рядом с золотым блоком!");
+        }
+    }
+
+    @EventHandler
+    public void onBlockPlace(BlockPlaceEvent event) {
+        if (blockLocation != null && isNearBlock(event.getBlock().getLocation())) {
+            event.setCancelled(true);
+            event.getPlayer().sendMessage("§cНельзя ставить блоки рядом с золотым блоком!");
+        }
+    }
+
+    private boolean isNearBlock(Location loc) {
+        return blockLocation != null && loc.getWorld().equals(blockLocation.getWorld()) && loc.distance(blockLocation) <= 10;
+    }
+
+    private Player getNearestPlayer(Location loc) {
+        Player nearest = null;
+        double minDist = Double.MAX_VALUE;
+        for (Player player : Bukkit.getOnlinePlayers()) {
+            if (player.getWorld().equals(loc.getWorld())) {
+                double dist = player.getLocation().distance(loc);
+                if (dist < minDist) {
+                    minDist = dist;
+                    nearest = player;
+                }
+            }
+        }
+        return nearest;
+    }
+
+    private ItemStack createRedPot() {
+        ItemStack pot = new ItemStack(Material.DECORATED_POT);
+        ItemMeta meta = pot.getItemMeta();
+        meta.displayName(Component.text("★ Горшσчéк лÿта ★").color(NamedTextColor.GOLD).decoration(TextDecoration.ITALIC, false));
+        meta.lore(java.util.List.of(Component.text("Красный").color(NamedTextColor.RED)));
+        meta.setEnchantmentGlintOverride(true);
+        pot.setItemMeta(meta);
+        pot.addUnsafeEnchantment(Enchantment.FORTUNE, 3);
+        return pot;
+    }
+
+    private ItemStack createPurplePot() {
+        ItemStack pot = new ItemStack(Material.DECORATED_POT);
+        ItemMeta meta = pot.getItemMeta();
+        meta.displayName(Component.text("★ Горшσчéк лÿта ★").color(NamedTextColor.GOLD).decoration(TextDecoration.ITALIC, false));
+        meta.lore(java.util.List.of(Component.text("Фиолетовый")));
+        meta.setEnchantmentGlintOverride(true);
+        pot.setItemMeta(meta);
+        pot.addUnsafeEnchantment(Enchantment.FORTUNE, 3);
+        return pot;
+    }
+
+    @Override
+    public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
+        if (!(sender instanceof Player player)) return true;
+        if (blockLocation == null) return true;
+        ItemStack compass = new ItemStack(Material.COMPASS);
+        CompassMeta meta = (CompassMeta) compass.getItemMeta();
+        meta.setDisplayName(COMPASS_NAME);
+        meta.setLodestone(blockLocation);
+        meta.setLodestoneTracked(false);
+        meta.addEnchant(Enchantment.FORTUNE, 1, true);
+        compass.setItemMeta(meta);
+        player.getInventory().addItem(compass);
+        player.sendMessage("§6Вы получили золотой компас!");
+        return true;
+    }
+}

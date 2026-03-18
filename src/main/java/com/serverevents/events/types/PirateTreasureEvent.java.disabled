@@ -1,0 +1,149 @@
+package com.serverevents.events.types;
+
+import com.serverevents.ServerEvents;
+import com.serverevents.events.ServerEvent;
+import org.bukkit.*;
+import org.bukkit.block.Block;
+import org.bukkit.block.Chest;
+import org.bukkit.boss.BarColor;
+import org.bukkit.boss.BarStyle;
+import org.bukkit.command.Command;
+import org.bukkit.command.CommandExecutor;
+import org.bukkit.command.CommandSender;
+import org.bukkit.enchantments.Enchantment;
+import org.bukkit.entity.EntityType;
+import org.bukkit.entity.Player;
+import org.bukkit.entity.Zombie;
+import org.bukkit.event.HandlerList;
+import org.bukkit.event.Listener;
+import org.bukkit.inventory.ItemStack;
+import org.bukkit.inventory.meta.CompassMeta;
+import org.bukkit.inventory.meta.ItemMeta;
+import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.format.NamedTextColor;
+import net.kyori.adventure.text.format.TextDecoration;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Random;
+
+public class PirateTreasureEvent extends ServerEvent implements CommandExecutor, Listener {
+    private final ServerEvents plugin;
+    private Location treasureLocation;
+    private final List<Zombie> zombies = new ArrayList<>();
+    private static final String COMPASS_NAME = "§6§l★ Пиратский компас ★";
+
+    public PirateTreasureEvent(ServerEvents plugin) {
+        super("Пиратское сокровище");
+        this.plugin = plugin;
+    }
+
+    @Override
+    public void start() {
+        bossBar = Bukkit.createBossBar(
+            "§cПиратское сокровище §f| Найти локацию /compass",
+            BarColor.RED,
+            BarStyle.SOLID
+        );
+        bossBar.setProgress(1.0);
+        Bukkit.getPluginManager().registerEvents(this, plugin);
+        plugin.getCommand("compass").setExecutor(this);
+        spawnTreasure();
+    }
+
+    private void spawnTreasure() {
+        World world = Bukkit.getWorlds().get(0);
+        Random random = new Random();
+        int x = random.nextInt(2000) - 1000;
+        int z = random.nextInt(2000) - 1000;
+        int y = world.getHighestBlockYAt(x, z) - random.nextInt(3) - 1;
+        treasureLocation = new Location(world, x, y, z);
+
+        Block chestBlock = world.getBlockAt(treasureLocation);
+        chestBlock.setType(Material.CHEST);
+
+        Bukkit.getScheduler().runTaskLater(plugin, () -> {
+            if (chestBlock.getState() instanceof Chest chest) {
+                for (int i = 0; i < 5; i++) {
+                    chest.getInventory().addItem(random.nextDouble() < 0.15 ? createRedPot() : createPurplePot());
+                }
+            }
+        }, 1L);
+
+        for (int i = 0; i < 20; i++) {
+            Location zombieLoc = treasureLocation.clone().add(random.nextInt(10) - 5, 1, random.nextInt(10) - 5);
+            zombieLoc.setY(world.getHighestBlockYAt(zombieLoc) + 1);
+            Zombie zombie = (Zombie) world.spawnEntity(zombieLoc, EntityType.ZOMBIE);
+            zombie.setCustomName("§cПиратский зомби");
+            zombie.setCustomNameVisible(true);
+            zombies.add(zombie);
+        }
+    }
+
+    @Override
+    public void stop() {
+        if (bossBar != null) bossBar.removeAll();
+        zombies.forEach(z -> { if (z != null && z.isValid()) z.remove(); });
+        zombies.clear();
+        if (treasureLocation != null && treasureLocation.getBlock().getType() == Material.CHEST) {
+            treasureLocation.getBlock().setType(Material.AIR);
+        }
+        for (Player p : Bukkit.getOnlinePlayers()) {
+            p.getInventory().forEach(item -> {
+                if (item != null && item.hasItemMeta() && COMPASS_NAME.equals(item.getItemMeta().getDisplayName())) {
+                    p.getInventory().remove(item);
+                }
+            });
+        }
+        HandlerList.unregisterAll(this);
+    }
+
+    @Override
+    public void tick() {}
+
+    @Override
+    public void onPlayerJoin(Player player) {
+        if (bossBar != null && preferences != null && preferences.isEnabled(player.getUniqueId())) {
+            bossBar.removePlayer(player);
+            bossBar.addPlayer(player);
+            player.playSound(player.getLocation(), Sound.ENTITY_ZOMBIE_AMBIENT, 1.0f, 0.8f);
+        }
+    }
+
+    @Override
+    public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
+        if (!(sender instanceof Player player)) return true;
+        ItemStack compass = new ItemStack(Material.COMPASS);
+        CompassMeta meta = (CompassMeta) compass.getItemMeta();
+        meta.setDisplayName(COMPASS_NAME);
+        meta.setLodestone(treasureLocation);
+        meta.setLodestoneTracked(false);
+        meta.addEnchant(Enchantment.FORTUNE, 1, true);
+        compass.setItemMeta(meta);
+        player.getInventory().addItem(compass);
+        player.sendMessage("§6Вы получили пиратский компас!");
+        return true;
+    }
+
+    private ItemStack createRedPot() {
+        ItemStack pot = new ItemStack(Material.DECORATED_POT);
+        ItemMeta meta = pot.getItemMeta();
+        meta.displayName(Component.text("★ Горшσчéк лÿта ★").color(NamedTextColor.GOLD).decoration(TextDecoration.ITALIC, false));
+        meta.lore(java.util.List.of(Component.text("Красный").color(NamedTextColor.RED)));
+        meta.setEnchantmentGlintOverride(true);
+        pot.setItemMeta(meta);
+        pot.addUnsafeEnchantment(Enchantment.FORTUNE, 3);
+        return pot;
+    }
+
+    private ItemStack createPurplePot() {
+        ItemStack pot = new ItemStack(Material.DECORATED_POT);
+        ItemMeta meta = pot.getItemMeta();
+        meta.displayName(Component.text("★ Горшσчéк лÿта ★").color(NamedTextColor.GOLD).decoration(TextDecoration.ITALIC, false));
+        meta.lore(java.util.List.of(Component.text("Фиолетовый")));
+        meta.setEnchantmentGlintOverride(true);
+        pot.setItemMeta(meta);
+        pot.addUnsafeEnchantment(Enchantment.FORTUNE, 3);
+        return pot;
+    }
+}
